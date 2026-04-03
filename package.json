@@ -1,0 +1,6 @@
+{
+  "name": "dodge-the-meetings",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Static single-file game for Vercel static hosting"
+}
