@@ -1,0 +1,2822 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DODGE THE MEETINGS | Surviving...</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230d0d1a'/%3E%3Cg fill='%2300ff41'%3E%3Crect x='2' y='5' width='1' height='1'/%3E%3Crect x='4' y='4' width='1' height='1'/%3E%3Crect x='6' y='4' width='1' height='1'/%3E%3Crect x='8' y='5' width='1' height='1'/%3E%3Crect x='10' y='4' width='1' height='1'/%3E%3Crect x='12' y='5' width='1' height='1'/%3E%3Crect x='5' y='9' width='1' height='1'/%3E%3Crect x='7' y='9' width='1' height='1'/%3E%3Cpath d='M5 11h6' stroke='%2300ff41' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E" />
+  <style>
+    :root{
+      --bg0:#0d0d1a;
+      --grid: rgba(255,255,255,0.08);
+      --vignette: rgba(0,0,0,0.58);
+      --green:#00ff41;
+      --red:#ff3333;
+      --blue:#4a9eff;
+      --purple:#611f69;
+      --maroon:#8B1A1A;
+      --maroon2:#cc2222;
+      --jira:#0052CC;
+      --jira2:#0747A6;
+
+      --hud1-h:34px;
+      --hud2-h:38px;
+      --bottom-h:24px;
+
+      --field-pad:20px;
+      --player-glow: 0 0 20px rgba(0,255,65,0.15);
+    }
+
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      overflow:hidden;
+      background: var(--bg0);
+      font-family: "Courier New", Courier, monospace;
+      color: var(--green);
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Background stack: grid + vignette + scanlines */
+    #bgGrid{
+      position:fixed; inset:0;
+      z-index:0;
+      pointer-events:none;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity:0.55;
+      animation: gridScroll 36s linear infinite;
+      transform: translateZ(0);
+    }
+    @keyframes gridScroll{
+      from { background-position: 0 0; }
+      to   { background-position: 0 400px; }
+    }
+    #vignette{
+      position:fixed; inset:-40px;
+      z-index:1;
+      pointer-events:none;
+      background:
+        radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, var(--vignette) 75%, #000 100%);
+      opacity:0.95;
+    }
+    #scanlines{
+      position:fixed; inset:0;
+      z-index:2;
+      pointer-events:none;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          rgba(0,0,0,0.20),
+          rgba(0,0,0,0.20) 1px,
+          rgba(255,255,255,0.02) 2px,
+          rgba(255,255,255,0.0) 3px
+        );
+      opacity:0.04;
+      mix-blend-mode: multiply;
+    }
+
+    /* Subtle CRT glow */
+    #crtGlow{
+      position:fixed; inset:0;
+      z-index:3;
+      pointer-events:none;
+      background: radial-gradient(circle at 50% 40%, rgba(0,255,65,0.06), rgba(0,0,0,0) 45%);
+      opacity:0.6;
+    }
+
+    #hud{
+      position:fixed;
+      left:0; right:0; top:0;
+      z-index:50;
+      pointer-events:none;
+      height: calc(var(--hud1-h) + var(--hud2-h));
+      display:flex;
+      flex-direction:column;
+    }
+    #hudRow1, #hudRow2{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 6px 14px;
+      box-sizing:border-box;
+      pointer-events:none;
+    }
+    #hudRow1{ height: var(--hud1-h); }
+    #hudRow2{ height: var(--hud2-h); }
+
+    #hudLeft1, #hudCenter1, #hudRight1,
+    #hudLeft2, #hudCenter2, #hudRight2{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 0;
+    }
+
+    .monoTag{
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      color: var(--green);
+      text-shadow: 0 0 14px rgba(0,255,65,0.10);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .bracket{
+      opacity:0.9;
+    }
+    .blinkCursor{
+      display:inline-block;
+      width:8px;
+      height: 12px;
+      margin-left:2px;
+      border-right: 2px solid var(--green);
+      animation: cursorBlink 0.8s steps(2,end) infinite;
+      opacity:0.95;
+      transform: translateY(2px);
+    }
+    @keyframes cursorBlink{
+      0%{opacity:1;}
+      50%{opacity:0;}
+      100%{opacity:1;}
+    }
+
+    #speedBar{
+      display:flex;
+      gap:4px;
+      align-items:flex-end;
+      height: 14px;
+    }
+    .speedBlock{
+      width: 12px;
+      height: 14px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(0,255,65,0.22);
+      border-radius:2px;
+      position:relative;
+      overflow:hidden;
+    }
+    .speedFill{
+      position:absolute;
+      left:0; right:0; bottom:0;
+      height: calc(100% * var(--fill, 0));
+      background: rgba(0,255,65,0.55);
+      box-shadow: 0 0 18px rgba(0,255,65,0.12);
+      transition: height 120ms linear, background 120ms linear;
+    }
+
+    #bottomBar{
+      position:fixed;
+      left:0; right:0; bottom:0;
+      height: var(--bottom-h);
+      z-index:60;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      padding: 0 14px;
+      box-sizing:border-box;
+      color: rgba(0,255,65,0.9);
+      font-size: 12px;
+      pointer-events:none;
+      background: linear-gradient(to top, rgba(0,0,0,0.30), rgba(0,0,0,0));
+      text-shadow: 0 0 18px rgba(0,255,65,0.12);
+    }
+    #bottomBar .bottomLeft{ flex:1; min-width:0; }
+    #bottomBar #powerTag{
+      flex:1;
+      text-align:center;
+      color: rgba(74,158,255,0.95);
+      min-width:0;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    #bottomBar #multTag{ flex:1; text-align:right; min-width:0; }
+
+    #field{
+      position:fixed;
+      left:0; right:0;
+      top: calc(var(--hud1-h) + var(--hud2-h));
+      bottom: var(--bottom-h);
+      z-index:10;
+      overflow:hidden;
+    }
+
+    #effectsLayer{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      z-index:80;
+    }
+
+    #overlay{
+      position:absolute; inset:0;
+      z-index:90;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 20px;
+      box-sizing:border-box;
+      background: rgba(0,0,0,0.40);
+      backdrop-filter: blur(1.5px);
+    }
+    #overlay.hidden{ display:none; }
+
+    #overlayCard{
+      width:min(760px, 100%);
+      border: 1px solid rgba(0,255,65,0.22);
+      background: linear-gradient(180deg, rgba(13,13,26,0.62), rgba(0,0,0,0.26));
+      box-shadow: 0 0 60px rgba(0,255,65,0.05);
+      padding: 20px 18px;
+      position:relative;
+      overflow:hidden;
+    }
+    #overlayCard::before{
+      content:"";
+      position:absolute; inset:-2px;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(0,255,65,0.14), rgba(0,0,0,0) 40%),
+        radial-gradient(circle at 85% 30%, rgba(74,158,255,0.10), rgba(0,0,0,0) 40%);
+      opacity:0.8;
+      pointer-events:none;
+    }
+    #overlayInner{
+      position:relative;
+      z-index:2;
+      pointer-events:auto;
+      max-height:min(92vh, 720px);
+      overflow-y:auto;
+    }
+
+    .menuWrap{
+      max-width:520px;
+      margin:0 auto;
+      text-align:center;
+    }
+    .menuStartBtn{
+      margin: 16px auto 6px;
+      display:block;
+      width:min(340px, 100%);
+      padding:14px 18px;
+      font-family:"Courier New", Courier, monospace;
+      font-size:15px;
+      font-weight:700;
+      letter-spacing:2px;
+      cursor:pointer;
+      color:#001208;
+      background: linear-gradient(180deg, #1aff5c, #00aa33);
+      border:2px solid rgba(0,255,65,0.9);
+      border-radius:4px;
+      box-shadow: 0 0 28px rgba(0,255,65,0.35), inset 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .menuStartBtn:hover{ filter:brightness(1.08); }
+    .menuStartBtn:focus-visible{
+      outline:2px solid #4a9eff;
+      outline-offset:3px;
+    }
+    .menuPersonalBest{
+      margin-top:6px;
+      font-size:13px;
+      text-align:center;
+    }
+    .menuHint{
+      margin-top:8px;
+      font-size:11px;
+      text-align:center;
+      color: rgba(255,255,255,0.55);
+    }
+    .leaderboardPanel{
+      margin-top:18px;
+      padding:14px 14px 12px;
+      text-align:left;
+      border:2px solid rgba(0,255,65,0.45);
+      background:rgba(0,0,0,0.72);
+      border-radius:4px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,65,0.08);
+    }
+    .leaderboardPanel h3{
+      margin:0 0 10px 0;
+      font-size:12px;
+      letter-spacing:1.5px;
+      color: rgba(0,255,65,0.98);
+      text-align:center;
+    }
+    .leaderboardHead{
+      display:grid;
+      grid-template-columns: 52px 1fr 72px;
+      font-size:10px;
+      letter-spacing:0.5px;
+      opacity:0.65;
+      padding:0 2px 6px;
+      border-bottom:1px solid rgba(0,255,65,0.22);
+      margin-bottom:4px;
+    }
+    .leaderboardRow{
+      display:grid;
+      grid-template-columns: 52px 1fr 72px;
+      align-items:center;
+      font-size:12px;
+      padding:7px 2px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.9);
+    }
+    .leaderboardRow.muted{
+      display:block;
+      font-style:italic;
+      opacity:0.65;
+      text-align:center;
+      padding:12px 4px;
+      border-bottom:none;
+    }
+    .lbBonus{ text-align:right; color: rgba(0,255,65,0.85); }
+    .lastRunBanner{
+      margin-bottom:16px;
+      padding:12px 12px 14px;
+      border:1px solid rgba(255,51,51,0.55);
+      background: linear-gradient(180deg, rgba(45,0,0,0.55), rgba(10,0,0,0.45));
+      border-radius:4px;
+    }
+
+    .titleAscii{
+      font-size: 22px;
+      line-height: 1.05;
+      letter-spacing: 0.8px;
+      text-shadow: 0 0 20px rgba(0,255,65,0.08);
+      margin: 6px 0 14px 0;
+      color: rgba(0,255,65,0.95);
+      white-space:pre;
+    }
+    .pressAny{
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--green);
+      text-shadow: 0 0 18px rgba(0,255,65,0.16);
+      animation: blinkText 0.95s steps(2,end) infinite;
+    }
+    @keyframes blinkText{
+      0%{opacity:1;}
+      50%{opacity:0.25;}
+      100%{opacity:1;}
+    }
+
+    .bigCenter{
+      font-size: 34px;
+      letter-spacing: 1px;
+      color: var(--red);
+      text-shadow: 0 0 28px rgba(255,51,51,0.18);
+      margin: 6px 0 8px 0;
+    }
+    .subCenter{
+      font-size: 14px;
+      color: rgba(0,255,65,0.95);
+      margin: 6px 0 10px 0;
+    }
+
+    #trophyWrap{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .trophy{
+      width: 52px;
+      height: 60px;
+      position:relative;
+      filter: drop-shadow(0 0 18px rgba(255,204,51,0.10));
+    }
+    .trophy .cup{
+      position:absolute;
+      left: 50%; top: 6px;
+      transform: translateX(-50%);
+      width: 44px; height: 28px;
+      border-radius: 6px 6px 3px 3px;
+      background: linear-gradient(180deg, rgba(255,205,60,0.95), rgba(180,120,0,0.65));
+      border: 1px solid rgba(255,230,140,0.55);
+      box-shadow: 0 0 30px rgba(255,205,60,0.10);
+    }
+    .trophy .stem{
+      position:absolute;
+      left: 50%; top: 34px;
+      transform: translateX(-50%);
+      width: 10px; height: 14px;
+      background: rgba(255,205,60,0.85);
+      border: 1px solid rgba(255,230,140,0.55);
+      border-radius: 3px;
+    }
+    .trophy .base{
+      position:absolute;
+      left: 50%; top: 46px;
+      transform: translateX(-50%);
+      width: 32px; height: 10px;
+      background: rgba(255,205,60,0.72);
+      border: 1px solid rgba(255,230,140,0.55);
+      border-radius: 2px;
+    }
+    .trophy .handleL, .trophy .handleR{
+      position:absolute;
+      top: 10px;
+      width: 12px; height: 18px;
+      border: 3px solid rgba(255,230,140,0.75);
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      opacity:0.9;
+    }
+    .trophy .handleL{ left: 4px; }
+    .trophy .handleR{ right: 4px; }
+
+    .newBest{
+      color: #ffdd66;
+      text-shadow: 0 0 20px rgba(255,230,140,0.20);
+      font-size: 16px;
+      font-weight: 700;
+      animation: bestFlash 0.9s steps(2,end) infinite;
+    }
+    @keyframes bestFlash{
+      0%{opacity:1;}
+      50%{opacity:0.15;}
+      100%{opacity:1;}
+    }
+
+    /* Game objects */
+    .obj{
+      position:absolute;
+      left: 0px;
+      top: 0px;
+      transform: translateX(-50%);
+      will-change: top, left, transform, opacity;
+      z-index:20;
+    }
+    .obj.spawnPop{
+      animation: spawnPop 150ms ease-out both;
+    }
+    @keyframes spawnPop{
+      from { transform: translateX(-50%) scale(0); opacity: 0.15; }
+      to   { transform: translateX(-50%) scale(1); opacity: 1; }
+    }
+
+    /* Calendar invite */
+    .calendar{
+      width: 48px;
+      height: 40px;
+    }
+    .calendar .card{
+      width: 48px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--maroon);
+      border: 2px solid var(--maroon2);
+      box-sizing:border-box;
+      position:relative;
+      overflow:hidden;
+      transform-origin:center;
+      animation: calOsc 900ms ease-in-out infinite;
+    }
+    @keyframes calOsc{
+      0%{ transform: rotate(-3deg); }
+      50%{ transform: rotate(3deg); }
+      100%{ transform: rotate(-3deg); }
+    }
+    .calendar .header{
+      height: 10px;
+      background: rgba(0,0,0,0.28);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 8px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .calendar .grid{
+      position:absolute;
+      left: 7px; right: 7px;
+      top: 13px; bottom: 7px;
+      background:
+        radial-gradient(circle, rgba(204,34,34,0.95) 1.6px, rgba(204,34,34,0) 1.7px);
+      background-size: 8px 6px;
+      opacity:0.95;
+      filter: drop-shadow(0 0 10px rgba(204,34,34,0.18));
+    }
+    .calendar .clock{
+      position:absolute;
+      left: 9px; bottom: 6px;
+      width: 14px; height: 14px;
+      opacity:0.95;
+    }
+    .calendar .clock .c0{ position:absolute; left: 0; top: 4px; width: 2px; height: 6px; background: rgba(204,34,34,0.9); border-radius: 1px; }
+    .calendar .clock .c1{ position:absolute; left: 6px; top: 0px; width: 2px; height: 6px; background: rgba(204,34,34,0.9); border-radius: 1px; }
+    .calendar .clock .c2{ position:absolute; left: 6px; top: 6px; width: 2px; height: 2px; background: rgba(204,34,34,0.9); border-radius: 1px; }
+    .calendar .clock .ring{
+      position:absolute;
+      left: 3px; top: 3px;
+      width: 8px; height: 8px;
+      border: 2px solid rgba(204,34,34,0.55);
+      border-radius: 50%;
+      box-sizing:border-box;
+      filter: drop-shadow(0 0 10px rgba(204,34,34,0.15));
+    }
+
+    /* Slack notification */
+    .slack{
+      width: 40px;
+      height: 40px;
+    }
+    .slack .card{
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--purple);
+      border: 2px solid rgba(255,255,255,0.18);
+      box-sizing:border-box;
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      animation: slackPulse 1s ease-in-out infinite;
+      box-shadow: 0 0 0 rgba(97,31,105,0);
+    }
+    @keyframes slackPulse{
+      0%{ box-shadow: 0 0 16px rgba(97,31,105,0.55); }
+      50%{ box-shadow: 0 0 0 rgba(97,31,105,0.0); }
+      100%{ box-shadow: 0 0 16px rgba(97,31,105,0.55); }
+    }
+    .slack .hash{
+      width: 16px; height: 16px;
+      position:relative;
+      opacity:0.95;
+    }
+    .slack .hash .hbarH1, .slack .hash .hbarH2,
+    .slack .hash .hbarV1, .slack .hash .hbarV2{
+      position:absolute;
+      background: rgba(255,255,255,0.95);
+      border-radius: 2px;
+      box-shadow: 0 0 10px rgba(255,255,255,0.08);
+    }
+    .slack .hash .hbarH1{ left: 0; right:0; top: 4px; height: 3px; }
+    .slack .hash .hbarH2{ left: 0; right:0; bottom: 3px; height: 3px; }
+    .slack .hash .hbarV1{ top:0; bottom:0; left: 4px; width: 3px; }
+    .slack .hash .hbarV2{ top:0; bottom:0; right: 4px; width: 3px; }
+    .slack .dot{
+      position:absolute;
+      top: 4px; right: 6px;
+      width: 7px; height: 7px;
+      background: #ff3333;
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(255,51,51,0.25);
+    }
+
+    /* Jira ticket */
+    .jira{
+      width: 52px;
+      height: 36px;
+    }
+    .jira .card{
+      width: 52px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--jira);
+      border: 2px solid var(--jira2);
+      box-sizing:border-box;
+      position:relative;
+      overflow:hidden;
+      box-shadow: 0 0 24px rgba(74,158,255,0.10);
+    }
+    .jira .id{
+      position:absolute;
+      left: 8px; top: 9px;
+      font-size: 9px;
+      color:#fff;
+      opacity:0.95;
+      letter-spacing: 0.4px;
+      white-space:nowrap;
+    }
+    .jira .status{
+      position:absolute;
+      left: 6px; right: 6px;
+      bottom: 6px;
+      height: 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.18);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color:#001018;
+    }
+    .jira .icon{
+      position:absolute;
+      left: 7px; top: 6px;
+      width: 10px; height: 10px;
+      opacity:0.95;
+    }
+    .jira .icon::before{
+      content:"";
+      position:absolute;
+      left: 2px; top: 1px;
+      width: 6px; height: 6px;
+      background: rgba(0,255,65,0.8);
+      border-radius: 2px;
+      transform: rotate(45deg);
+      box-shadow: 0 0 12px rgba(0,255,65,0.18);
+    }
+    .jira .icon::after{
+      content:"";
+      position:absolute;
+      left: 2.8px; top: 3px;
+      width: 5px; height: 2px;
+      border-left: 2px solid rgba(255,255,255,0.95);
+      border-bottom: 2px solid rgba(255,255,255,0.95);
+      transform: rotate(-45deg);
+      opacity:0.9;
+    }
+    .jira .trailGhost{
+      position:absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 52px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--jira);
+      border: 2px solid rgba(7,71,166,0.55);
+      overflow:hidden;
+      pointer-events:none;
+    }
+    .jira .trailGhost .ghostId{
+      position:absolute;
+      left: 8px; top: 9px;
+      font-size: 9px;
+      color:#fff;
+      opacity:0.85;
+      letter-spacing: 0.4px;
+      white-space:nowrap;
+    }
+    .jira .trailGhost .ghostStatus{
+      position:absolute;
+      left: 6px; right: 6px;
+      bottom: 6px;
+      height: 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.14);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color:#001018;
+      opacity:0.92;
+    }
+    .jira .trailGhost .ghostIcon{
+      position:absolute;
+      left: 7px; top: 6px;
+      width: 10px; height: 10px;
+      opacity:0.9;
+    }
+    .jira .trailGhost .ghostIcon::before{
+      content:"";
+      position:absolute;
+      left: 2px; top: 1px;
+      width: 6px; height: 6px;
+      background: rgba(0,255,65,0.70);
+      border-radius: 2px;
+      transform: rotate(45deg);
+    }
+    .jira .trailGhost .ghostIcon::after{
+      content:"";
+      position:absolute;
+      left: 2.8px; top: 3px;
+      width: 5px; height: 2px;
+      border-left: 2px solid rgba(255,255,255,0.85);
+      border-bottom: 2px solid rgba(255,255,255,0.85);
+      transform: rotate(-45deg);
+      opacity:0.9;
+    }
+
+    /* Collectible: coffee boost */
+    .coffee{
+      width: 30px;
+      height: 30px;
+    }
+    .coffee .cup{
+      position:absolute;
+      left: 50%;
+      bottom: 2px;
+      transform: translateX(-50%);
+      width: 18px;
+      height: 14px;
+      border-radius: 3px 3px 4px 4px;
+      background: linear-gradient(180deg, rgba(20,20,20,0.95), rgba(0,0,0,0.8));
+      border: 1px solid rgba(255,255,255,0.20);
+      box-shadow: 0 0 14px rgba(0,255,65,0.25);
+    }
+    .coffee .coffeeTop{
+      position:absolute;
+      left: 50%;
+      bottom: 12px;
+      transform: translateX(-50%);
+      width: 16px;
+      height: 4px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 30%, #3b2a20, #140d08);
+      box-shadow: 0 0 8px rgba(0,0,0,0.6) inset;
+    }
+    .coffee .handle{
+      position:absolute;
+      right: 6px;
+      bottom: 8px;
+      width: 6px;
+      height: 8px;
+      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-left: none;
+    }
+    .coffee .steam{
+      position:absolute;
+      left: 50%;
+      bottom: 20px;
+      width: 20px;
+      height: 14px;
+      transform: translateX(-50%);
+      pointer-events:none;
+    }
+    .coffee .steam span{
+      position:absolute;
+      width: 4px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0));
+      opacity:0.8;
+      filter: blur(0.4px);
+      animation: steamRise 1200ms ease-out infinite;
+    }
+    .coffee .steam span:nth-child(1){ left: 4px; animation-delay: 0ms; }
+    .coffee .steam span:nth-child(2){ left: 9px; animation-delay: 220ms; }
+    .coffee .steam span:nth-child(3){ left: 14px; animation-delay: 440ms; }
+    @keyframes steamRise{
+      0%{ transform: translateY(4px) scale(0.8); opacity:0; }
+      20%{ opacity:0.8; }
+      100%{ transform: translateY(-8px) scale(1); opacity:0; }
+    }
+
+    /* Power-up pickups */
+    .pickup{
+      width: 32px;
+      height: 32px;
+    }
+    .pickup.shield .bubble{
+      position:absolute;
+      left:50%; top:50%;
+      transform: translate(-50%,-50%);
+      width: 26px;
+      height: 26px;
+      border-radius:50%;
+      border:3px solid rgba(0,255,65,0.9);
+      background: radial-gradient(circle at 30% 30%, rgba(0,40,20,0.9), rgba(0,0,0,0.75));
+      box-shadow: 0 0 18px rgba(0,255,65,0.45);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      font-weight:900;
+      color: rgba(0,255,65,0.95);
+    }
+    .pickup.slow .dial{
+      position:absolute;
+      left:50%; top:50%;
+      transform: translate(-50%,-50%);
+      width: 26px;
+      height: 26px;
+      border-radius:50%;
+      background: radial-gradient(circle at 35% 35%, rgba(0,40,80,0.95), rgba(0,0,0,0.8));
+      border:2px solid rgba(74,158,255,0.95);
+      box-shadow: 0 0 18px rgba(74,158,255,0.35);
+    }
+    .pickup.slow .hand{
+      position:absolute;
+      left:50%; top:50%;
+      width:2px;
+      height:9px;
+      background: rgba(255,255,255,0.95);
+      transform-origin: bottom center;
+      transform: translate(-50%,-100%) rotate(20deg);
+      border-radius:1px;
+    }
+    .pickup.slow .dot{
+      position:absolute;
+      left:50%; top:50%;
+      width:3px;
+      height:3px;
+      background: #fff;
+      border-radius:50%;
+      transform: translate(-50%,-50%);
+    }
+    .pickup.slow .label{
+      position:absolute;
+      left:0; right:0;
+      bottom: -2px;
+      font-size:7px;
+      font-weight:700;
+      text-align:center;
+      color: rgba(74,158,255,0.95);
+      letter-spacing:0.5px;
+    }
+
+    /* Player */
+    #playerLayer{
+      position:absolute;
+      inset:0;
+      z-index:40;
+      pointer-events:none;
+    }
+
+    #player, #footprints{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+    }
+
+    .avatarOuter{
+      position:absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%) rotate(0deg) scaleY(1);
+      transition: transform 120ms ease;
+      box-shadow: var(--player-glow);
+      border-radius: 10px;
+      transform-origin: center bottom;
+    }
+    .avatarBreath{
+      transform-origin: center bottom;
+      animation: breath 2s ease-in-out infinite;
+    }
+    @keyframes breath{
+      0%,100%{ transform: scale(1); }
+      50%{ transform: scale(1.02); }
+    }
+    .avatarOuter.ducking{
+      transform: translateX(-50%) rotate(var(--tilt, 0deg)) scaleY(0.7);
+      transition: transform 120ms ease;
+      box-shadow: 0 0 20px rgba(0,255,65,0.10);
+    }
+
+    .avatarHead{
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(0,255,65,0.10);
+      border: 1px solid rgba(0,255,65,0.22);
+      position:absolute;
+      left: 50%;
+      top: -22px;
+      transform: translateX(-50%);
+      box-shadow: 0 0 18px rgba(0,255,65,0.12);
+    }
+    .avatarFace{
+      position:absolute;
+      left:0; right:0;
+      top: 6px;
+      height: 5px;
+      display:flex;
+      justify-content:space-evenly;
+      padding: 0 3px;
+      box-sizing:border-box;
+    }
+    .eye{
+      width: 3px;
+      height: 3px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(0,255,65,0.22);
+      animation: blink 4.5s infinite;
+    }
+    .eye.right{ animation-delay: 0.55s; }
+    @keyframes blink{
+      0%, 92%, 100% { transform: scaleY(1); }
+      94% { transform: scaleY(0.12); }
+      95% { transform: scaleY(1); }
+    }
+
+    .avatarBody{
+      width: 20px;
+      height: 26px;
+      position:absolute;
+      left: 50%;
+      top: 0;
+      transform: translateX(-50%);
+      background: #2a2a2a;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow:
+        inset 0 0 0 1px rgba(0,0,0,0.30),
+        0 0 18px rgba(0,255,65,0.06);
+    }
+    .laptop{
+      position:absolute;
+      left: 50%;
+      top: 4px;
+      transform: translateX(-50%);
+      width: 16px;
+      height: 14px;
+    }
+    .laptop .rect1, .laptop .rect2{
+      position:absolute;
+      left: 0;
+      width: 8px;
+      height: 2px;
+      background: rgba(0,255,65,0.95);
+      border-radius: 1px;
+      box-shadow: 0 0 16px rgba(0,255,65,0.25);
+    }
+    .laptop .rect1{ top: 2px; }
+    .laptop .rect2{ bottom: 2px; left: 6px; width: 7px; }
+
+    .avatarLegs{
+      position:absolute;
+      left: 50%;
+      top: 22px;
+      transform: translateX(-50%);
+      display:flex;
+      gap: 3px;
+    }
+    .leg{
+      width: 6px;
+      height: 14px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 0 18px rgba(0,255,65,0.04);
+    }
+
+    .footprint{
+      opacity:0;
+      filter: blur(0.1px);
+      pointer-events:none;
+      position:absolute;
+      inset:0;
+    }
+    .footprint .avatarOuter{
+      box-shadow: 0 0 20px rgba(0,255,65,0.08);
+      opacity:0.7;
+    }
+
+    /* Floating text and particles */
+    .floatText{
+      position:absolute;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -10px);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-shadow: 0 0 18px rgba(255,255,255,0.10);
+      opacity:0;
+      animation: floatUp 800ms ease-out both;
+      pointer-events:none;
+      z-index:95;
+      white-space:nowrap;
+    }
+    @keyframes floatUp{
+      0% { opacity: 1; transform: translate(-50%, 0px); }
+      65% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -28px); }
+    }
+    .speedUpFlash{
+      position:absolute;
+      left: 50%;
+      top: 40%;
+      transform: translate(-50%, -50%);
+      color: var(--red);
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-shadow: 0 0 30px rgba(255,51,51,0.25);
+      opacity:0;
+      animation: flashAcross 1000ms ease-out both;
+      z-index:96;
+      pointer-events:none;
+      white-space:nowrap;
+    }
+    @keyframes flashAcross{
+      0%{ opacity:0; transform: translate(-50%, -52%) scaleX(0.9); }
+      12%{ opacity:1; transform: translate(-50%, -50%) scaleX(1); }
+      85%{ opacity:1; }
+      100%{ opacity:0; transform: translate(-50%, -50%) scaleX(1.02); }
+    }
+
+    .achievement{
+      position:absolute;
+      left: 50%;
+      top: 44%;
+      transform: translate(-50%, -50%);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      opacity:0;
+      animation: achPop 900ms ease-out both;
+      z-index:97;
+      pointer-events:none;
+      white-space:nowrap;
+    }
+    @keyframes achPop{
+      0%{opacity:0; transform: translate(-50%, -50%) scale(0.96);}
+      14%{opacity:1; transform: translate(-50%, -50%) scale(1.0);}
+      80%{opacity:1;}
+      100%{opacity:0; transform: translate(-50%, -50%) scale(1.02);}
+    }
+
+    .particle{
+      position:absolute;
+      left: 50%;
+      top: 50%;
+      width: 3px;
+      height: 3px;
+      background: var(--green);
+      border-radius: 1px;
+      transform: translate(-50%, -50%);
+      opacity:0.9;
+      pointer-events:none;
+      z-index:120;
+      animation: particleFly var(--dur, 500ms) ease-out both;
+    }
+    @keyframes particleFly{
+      0%{
+        opacity:0.95;
+        transform: translate(-50%, -50%) translate(0px, 0px) scale(1);
+      }
+      100%{
+        opacity:0;
+        transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) scale(0.7);
+      }
+    }
+
+    .particleSpark{
+      width: 2px;
+      height: 2px;
+      background: #fff;
+      border-radius: 1px;
+      animation: sparkFly var(--dur, 240ms) ease-out both;
+      z-index:121;
+    }
+    @keyframes sparkFly{
+      0%{
+        opacity:0.95;
+        transform: translate(-50%, -50%) translate(0px, 0px) scale(1);
+      }
+      100%{
+        opacity:0;
+        transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) scale(0.6);
+      }
+    }
+
+    /* Hit overlays */
+    #globalRedFlash{
+      position:fixed;
+      inset:-60px;
+      z-index:200;
+      pointer-events:none;
+      opacity:0;
+      background:
+        radial-gradient(circle at 50% 40%, rgba(255,51,51,0.35), rgba(0,0,0,0) 55%),
+        rgba(255,51,51,0.18);
+    }
+    #globalRedFlash.hit{
+      animation: globalRedFlash 400ms ease-in-out both;
+    }
+    @keyframes globalRedFlash{
+      0%{ opacity:0; filter: saturate(1.0); }
+      20%{ opacity:1; filter: saturate(1.2); }
+      55%{ opacity:0.55; }
+      100%{ opacity:0; filter: saturate(1.0); }
+    }
+    #redFlash{
+      position:absolute;
+      inset:-30px;
+      background: rgba(255,51,51,0.30);
+      z-index:110;
+      pointer-events:none;
+      opacity:0;
+      animation: none;
+    }
+    #redFlash.hit{
+      animation: redFlash 400ms ease-in-out both;
+    }
+    @keyframes redFlash{
+      0%{ opacity:0; }
+      20%{ opacity:1; }
+      55%{ opacity:0.55; }
+      100%{ opacity:0; }
+    }
+
+    /* Shake the field */
+    #field.shaking{
+      animation: shake 300ms linear both;
+    }
+    @keyframes shake{
+      0%{ transform: translate(0,0); }
+      15%{ transform: translate(2px,-1px); }
+      30%{ transform: translate(-3px,2px); }
+      45%{ transform: translate(3px,1px); }
+      60%{ transform: translate(-2px,-2px); }
+      75%{ transform: translate(2px,3px); }
+      100%{ transform: translate(0,0); }
+    }
+
+    /* Wave dim overlay */
+    #waveDim{
+      position:absolute;
+      inset:0;
+      z-index:98;
+      background: rgba(0,0,0,0.30);
+      opacity:0;
+      pointer-events:none;
+    }
+    #waveDim.dim{
+      animation: waveDim 900ms ease-out both;
+    }
+    @keyframes waveDim{
+      0%{ opacity:0; }
+      12%{ opacity:0.3; }
+      100%{ opacity:0; }
+    }
+    #waveLabel{
+      position:absolute;
+      left: 50%;
+      top: 35%;
+      transform: translate(-50%, -50%);
+      font-size: 64px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: rgba(0,255,65,0.95);
+      text-shadow: 0 0 30px rgba(0,255,65,0.20);
+      opacity:0;
+      pointer-events:none;
+      z-index:99;
+      white-space:nowrap;
+    }
+    #waveLabel.show{
+      animation: waveLabel 900ms ease-out both;
+    }
+    @keyframes waveLabel{
+      0%{ opacity:0; transform: translate(-50%, -48%) scale(0.95); }
+      20%{ opacity:1; transform: translate(-50%, -50%) scale(1); }
+      75%{ opacity:1; }
+      100%{ opacity:0; transform: translate(-50%, -50%) scale(1.02); }
+    }
+
+    /* Mobile overlay */
+    #mobileOverlay{
+      position:absolute; inset:0;
+      z-index:95;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      box-sizing:border-box;
+      background: rgba(0,0,0,0.52);
+      pointer-events:none;
+      opacity:0;
+      transition: opacity 180ms ease;
+    }
+    #mobileOverlay.show{
+      opacity:1;
+      pointer-events:none;
+    }
+    #mobileCard{
+      width:min(640px, 100%);
+      border: 1px solid rgba(74,158,255,0.35);
+      background: rgba(13,13,26,0.70);
+      padding: 16px 14px;
+      box-shadow: 0 0 60px rgba(74,158,255,0.08);
+    }
+    .mobileTitle{
+      color: rgba(0,255,65,0.95);
+      font-size: 14px;
+      margin: 0 0 10px 0;
+    }
+    .kbdGraphic{
+      width: 240px;
+      height: 96px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(74,158,255,0.26);
+      margin: 8px auto 0 auto;
+      position:relative;
+      overflow:hidden;
+      box-shadow: 0 0 20px rgba(74,158,255,0.10);
+    }
+    .kbdRow{
+      position:absolute;
+      left: 14px; right: 14px;
+      height: 22px;
+      display:flex;
+      gap: 8px;
+    }
+    .kbdRow.r1{ top: 14px; }
+    .kbdRow.r2{ top: 38px; }
+    .kbdRow.r3{ top: 62px; }
+    .kbdKey{
+      flex:1;
+      background: rgba(74,158,255,0.20);
+      border: 1px solid rgba(74,158,255,0.34);
+      border-radius: 6px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.20);
+    }
+
+    /* Utility */
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <div id="bgGrid"></div>
+  <div id="vignette"></div>
+  <div id="scanlines"></div>
+  <div id="crtGlow"></div>
+
+  <div id="globalRedFlash"></div>
+
+  <div id="hud" aria-hidden="true">
+    <div id="hudRow1">
+      <div id="hudLeft1">
+        <div class="monoTag bracket">DODGE THE MEETINGS<span class="blinkCursor"></span></div>
+      </div>
+      <div id="hudCenter1">
+        <div class="monoTag bracket" id="survivedTag">[SURVIVED: 0m 00s]</div>
+      </div>
+      <div id="hudRight1">
+        <div class="monoTag bracket" id="bestTag">[BEST: 0:00]</div>
+      </div>
+    </div>
+    <div id="hudRow2">
+      <div id="hudLeft2">
+        <div class="monoTag bracket">WAVE: <span id="waveTag">01</span></div>
+      </div>
+      <div id="hudCenter2" style="gap:14px;">
+        <div class="monoTag bracket">SPEED:</div>
+        <div id="speedBar" aria-hidden="true">
+          <div class="speedBlock"><div class="speedFill" data-i="0" style="--fill:0;"></div></div>
+          <div class="speedBlock"><div class="speedFill" data-i="1" style="--fill:0;"></div></div>
+          <div class="speedBlock"><div class="speedFill" data-i="2" style="--fill:0;"></div></div>
+          <div class="speedBlock"><div class="speedFill" data-i="3" style="--fill:0;"></div></div>
+          <div class="speedBlock"><div class="speedFill" data-i="4" style="--fill:0;"></div></div>
+        </div>
+      </div>
+      <div id="hudRight2">
+        <div class="monoTag bracket">BONUS: <span id="bonusTag">+000</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="field" aria-label="Dodge the Meetings game">
+    <div id="playerLayer">
+      <div id="player"></div>
+      <div id="footprints"></div>
+    </div>
+
+    <div id="effectsLayer"></div>
+    <div id="waveDim"></div>
+    <div id="waveLabel"></div>
+    <div id="redFlash"></div>
+
+    <div id="overlay">
+      <div id="overlayCard">
+        <div id="overlayInner"></div>
+      </div>
+    </div>
+
+    <div id="mobileOverlay">
+      <div id="mobileCard">
+        <div class="mobileTitle">Best played on desktop with a keyboard — open on your laptop!</div>
+        <div class="kbdGraphic" aria-hidden="true">
+          <div class="kbdRow r1">
+            <div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div>
+          </div>
+          <div class="kbdRow r2">
+            <div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div>
+          </div>
+          <div class="kbdRow r3">
+            <div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div><div class="kbdKey"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottomBar">
+    <div class="bottomLeft">← → ↑ ↓ / WASD — DODGE</div>
+    <div id="powerTag">[PWR: —]</div>
+    <div id="multTag">1.0x</div>
+  </div>
+
+  <template id="avatarTemplate">
+    <div class="avatarOuter" style="--tilt:0deg;">
+      <div class="avatarBreath">
+        <div class="avatarHead">
+          <div class="avatarFace">
+            <div class="eye left"></div>
+            <div class="eye right"></div>
+          </div>
+        </div>
+        <div class="avatarBody">
+          <div class="laptop">
+            <div class="rect1"></div>
+            <div class="rect2"></div>
+          </div>
+        </div>
+        <div class="avatarLegs">
+          <div class="leg"></div>
+          <div class="leg"></div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "dodge_meetings_best";
+
+      const elField = document.getElementById("field");
+      const elPlayerHost = document.getElementById("player");
+      const elFootprintsHost = document.getElementById("footprints");
+      const elEffects = document.getElementById("effectsLayer");
+      const elOverlay = document.getElementById("overlay");
+      const elOverlayInner = document.getElementById("overlayInner");
+      const elRedFlash = document.getElementById("redFlash");
+      const elGlobalRedFlash = document.getElementById("globalRedFlash");
+      const elWaveDim = document.getElementById("waveDim");
+      const elWaveLabel = document.getElementById("waveLabel");
+
+      const survivedTag = document.getElementById("survivedTag");
+      const bestTag = document.getElementById("bestTag");
+      const waveTag = document.getElementById("waveTag");
+      const bonusTag = document.getElementById("bonusTag");
+      const multTag = document.getElementById("multTag");
+      const powerTag = document.getElementById("powerTag");
+
+      const speedFillEls = Array.from(document.querySelectorAll("#speedBar .speedFill"));
+
+      const mobileOverlay = document.getElementById("mobileOverlay");
+
+      const avatarTemplate = document.getElementById("avatarTemplate");
+      const overlayFlavors = [
+        "Another standup that could have been an email",
+        "Your calendar has been fully booked",
+        "3 new Jira tickets assigned to you",
+        "The sprint planning starts in 5 minutes",
+      ];
+
+      const gameOverFlavors = [
+        "It was a recurring meeting",
+        "It had 47 attendees",
+        "No agenda was provided",
+      ];
+
+      // ------- Audio (Web Audio API) -------
+      let audioCtx = null;
+      let audioUnlocked = false;
+      let lastTickDir = 0;
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        audioUnlocked = true;
+      }
+
+      function playTone(freq, ms, gainVal, type = "sine", ramp = true, startAt = 0) {
+        if (!audioUnlocked || !audioCtx) return;
+        const t0 = audioCtx.currentTime + startAt;
+        const osc = audioCtx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t0);
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, gainVal), t0 + 0.02);
+        if (ramp) gain.gain.exponentialRampToValueAtTime(0.0001, t0 + ms / 1000);
+        else gain.gain.setValueAtTime(gainVal, t0 + ms / 1000);
+
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0);
+        osc.stop(t0 + ms / 1000 + 0.02);
+      }
+
+      function playMovementTick() {
+        playTone(200, 30, 0.05, "sine", true);
+      }
+
+      function playWhoosh() {
+        if (!audioUnlocked || !audioCtx) return;
+        const t0 = audioCtx.currentTime;
+        const duration = 0.08;
+
+        const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          // White noise burst with quick fade
+          data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "highpass";
+        filter.frequency.setValueAtTime(400, t0);
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.08, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+
+        src.connect(filter).connect(gain).connect(audioCtx.destination);
+        src.start(t0);
+        src.stop(t0 + duration + 0.01);
+      }
+
+      function playSpeedIncrease() {
+        // Ascending two-tone beep
+        playTone(440, 100, 0.05, "square", true, 0);
+        playTone(550, 100, 0.06, "square", true, 0.10);
+      }
+
+      function playAchievementJingle() {
+        playTone(523, 80, 0.05, "triangle", true, 0);
+        playTone(659, 80, 0.06, "triangle", true, 0.08);
+        playTone(784, 80, 0.07, "triangle", true, 0.16);
+      }
+
+      function playGameOver() {
+        if (!audioUnlocked || !audioCtx) return;
+        // Descending slow tones
+        const steps = 6;
+        for (let i = 0; i < steps; i++) {
+          const f = 400 - (200 * i) / (steps - 1);
+          const startAt = (0.6 * i) / (steps - 1);
+          playTone(f, 100, 0.15, "sine", true, startAt);
+        }
+      }
+
+      // ------- Game state -------
+      // Goal time is effectively infinite now; play as long as you like.
+      const GOAL_MS = Infinity;
+
+      const state = {
+        mode: "start",
+        startTimeMs: 0,
+        elapsedMs: 0,
+        waveIndex: 0, // floor(elapsed/20s)
+        prevWaveIndex: -1,
+        nextWaveAt: 0,
+        spawnAccMs: 0,
+        spawnIntervalS: 1.8,
+        baseSpeed: 120,
+        speedInc: 20,
+        objects: [],
+        bgObjects: [],
+
+        player: {
+          x: 0,
+          y: 0,     // bottom offset in px
+          vx: 0,
+          vy: 0,
+          accel: 2200,      // px/s^2
+          maxVx: 520,      // px/s
+          accelY: 1600,
+          maxVy: 480,
+          friction: 7.2,   // per second
+          duckUntilMs: 0,
+          tiltDeg: 0,
+        },
+
+        input: {
+          left: false,
+          right: false,
+          up: false,
+          down: false,
+        },
+
+        trailXs: [],
+        trailTimer: null,
+        footprints: [],
+
+        // Score and stats
+        bonusScore: 0,
+        nearMisses: 0,
+        dodgedObjects: 0,
+
+        // Achievements
+        stillEmployedTriggered: new Set(),
+        nextStillSec: 30,
+        survivedMondayTriggered: false,
+        legendaryIntrovertTriggered: false,
+        goalReached: false,
+        shieldCharges: 0,
+        slowUntilMs: 0,
+      };
+
+      const GOODIE_TYPES = new Set(["coffee", "shield", "slow"]);
+      function isGoodie(type) {
+        return GOODIE_TYPES.has(type);
+      }
+
+      function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+      function formatBest(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${m}m ${String(s).padStart(2, "0")}s`;
+      }
+
+      function formatMSS(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${m}:${String(s).padStart(2, "0")}`;
+      }
+
+      function formatSurvivedHuman(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${m}m ${String(s).padStart(2, "0")}s`;
+      }
+
+      function shrinkRect(r, pad) {
+        return { left: r.left + pad, top: r.top + pad, right: r.right - pad, bottom: r.bottom - pad };
+      }
+
+      function growRect(r, pad) {
+        return { left: r.left - pad, top: r.top - pad, right: r.right + pad, bottom: r.bottom + pad };
+      }
+
+      function rectsOverlap(a, b) {
+        return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+      }
+
+      function distanceCenters(r1, r2) {
+        const x1 = (r1.left + r1.right) / 2;
+        const y1 = (r1.top + r1.bottom) / 2;
+        const x2 = (r2.left + r2.right) / 2;
+        const y2 = (r2.top + r2.bottom) / 2;
+        return Math.hypot(x1 - x2, y1 - y2);
+      }
+
+      // ------- DOM setup -------
+      function makeAvatarNode() {
+        const frag = avatarTemplate.content.cloneNode(true);
+        return frag.firstElementChild;
+      }
+
+      function createFootprints() {
+        elFootprintsHost.innerHTML = "";
+        state.footprints = [];
+        for (let i = 0; i < 3; i++) {
+          const wrap = document.createElement("div");
+          wrap.className = "footprint";
+          wrap.style.opacity = "0";
+          const av = makeAvatarNode();
+          wrap.appendChild(av);
+          elFootprintsHost.appendChild(wrap);
+          state.footprints.push(wrap);
+        }
+      }
+
+      function positionPlayer(xCenter) {
+        const outer = elPlayerHost.querySelector(".avatarOuter");
+        if (outer) outer.style.left = `${xCenter}px`;
+      }
+
+      function applyTilt() {
+        const tilt = state.player.tiltDeg;
+        const outer = elPlayerHost.querySelector(".avatarOuter");
+        if (!outer) return;
+        outer.style.setProperty("--tilt", `${tilt}deg`);
+        outer.style.transform = `translateX(-50%) rotate(${tilt}deg) scaleY(1)`;
+      }
+
+      function duckAvatar() {
+        if (state.player.duckUntilMs > performance.now()) return; // don't spam
+        const outer = elPlayerHost.querySelector(".avatarOuter");
+        if (!outer) return;
+        outer.classList.add("ducking");
+        state.player.duckUntilMs = performance.now() + 200;
+        setTimeout(() => outer.classList.remove("ducking"), 210);
+      }
+
+      // ------- Object factories -------
+      function pickType() {
+        const r = Math.random();
+        if (r < 0.055) return "coffee";
+        if (r < 0.095) return "shield";
+        if (r < 0.135) return "slow";
+        if (r < 0.78) return "calendar";
+        if (r < 0.93) return "slack";
+        return "jira";
+      }
+
+      function randomTicketId() {
+        const n = Math.floor(1000 + Math.random() * 8999);
+        return `PROJ-${n}`;
+      }
+
+      function randomJiraStatus() {
+        const statuses = [
+          { text: "IN PROGRESS", color: "rgba(255,205,60,0.92)" },
+          { text: "BLOCKED", color: "rgba(255,51,51,0.92)" },
+          { text: "REVIEW", color: "rgba(0,255,65,0.90)" },
+        ];
+        return statuses[Math.floor(Math.random() * statuses.length)];
+      }
+
+      function makeCalendarObj() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj calendar";
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const header = document.createElement("div");
+        header.className = "header";
+        header.textContent = "MEETING";
+
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        const clock = document.createElement("div");
+        clock.className = "clock";
+        const ring = document.createElement("div");
+        ring.className = "ring";
+        const c0 = document.createElement("div"); c0.className = "c0";
+        const c1 = document.createElement("div"); c1.className = "c1";
+        const c2 = document.createElement("div"); c2.className = "c2";
+        clock.appendChild(ring); clock.appendChild(c0); clock.appendChild(c1); clock.appendChild(c2);
+
+        card.appendChild(header);
+        card.appendChild(grid);
+        card.appendChild(clock);
+        wrap.appendChild(card);
+        return wrap;
+      }
+
+      function makeSlackObj() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj slack";
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const dot = document.createElement("div");
+        dot.className = "dot";
+
+        const hash = document.createElement("div");
+        hash.className = "hash";
+        const hH1 = document.createElement("div"); hH1.className = "hbarH1";
+        const hH2 = document.createElement("div"); hH2.className = "hbarH2";
+        const hV1 = document.createElement("div"); hV1.className = "hbarV1";
+        const hV2 = document.createElement("div"); hV2.className = "hbarV2";
+        hash.appendChild(hH1); hash.appendChild(hH2); hash.appendChild(hV1); hash.appendChild(hV2);
+
+        card.appendChild(hash);
+        card.appendChild(dot);
+        wrap.appendChild(card);
+        return wrap;
+      }
+
+      function makeJiraObj() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj jira";
+
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const icon = document.createElement("div");
+        icon.className = "icon";
+        const idEl = document.createElement("div");
+        idEl.className = "id";
+
+        const status = document.createElement("div");
+        status.className = "status";
+
+        const ghosts = [];
+        const ghostIdNodes = [];
+        const ghostStatusNodes = [];
+        const ghostIconNodes = [];
+
+        wrap.appendChild(card);
+        card.appendChild(icon);
+        card.appendChild(idEl);
+        card.appendChild(status);
+
+        // Trailing ghosts are absolute and rendered with last 3 y positions.
+        const trailGhostsWrap = document.createElement("div");
+        trailGhostsWrap.className = "trailGhosts";
+        wrap.appendChild(trailGhostsWrap);
+
+        for (let i = 0; i < 3; i++) {
+          const g = document.createElement("div");
+          g.className = "trailGhost";
+          const ghostIcon = document.createElement("div");
+          ghostIcon.className = "ghostIcon";
+          const ghostId = document.createElement("div");
+          ghostId.className = "ghostId";
+          const ghostStatus = document.createElement("div");
+          ghostStatus.className = "ghostStatus";
+          g.appendChild(ghostIcon);
+          g.appendChild(ghostId);
+          g.appendChild(ghostStatus);
+          trailGhostsWrap.appendChild(g);
+          ghosts.push(g);
+          ghostIdNodes.push(ghostId);
+          ghostStatusNodes.push(ghostStatus);
+          ghostIconNodes.push(ghostIcon);
+        }
+
+        // Fill-in visuals later.
+        return {
+          wrap,
+          setTicketData({ id, statusText, statusColor }) {
+            idEl.textContent = id;
+            status.textContent = statusText;
+            status.style.background = statusColor;
+            for (let i = 0; i < ghosts.length; i++) {
+              ghostIdNodes[i].textContent = id;
+              ghostStatusNodes[i].textContent = statusText;
+              ghostStatusNodes[i].style.background = statusColor;
+            }
+          },
+          ghosts,
+          ghostIdNodes,
+          ghostStatusNodes,
+        };
+      }
+
+      function makeObjElement(type) {
+        if (type === "calendar") return makeCalendarObj();
+        if (type === "slack") return makeSlackObj();
+        const jira = makeJiraObj();
+        return jira;
+      }
+
+      function makeCoffeeObj() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj coffee";
+        const cup = document.createElement("div");
+        cup.className = "cup";
+        const coffeeTop = document.createElement("div");
+        coffeeTop.className = "coffeeTop";
+        const handle = document.createElement("div");
+        handle.className = "handle";
+        const steam = document.createElement("div");
+        steam.className = "steam";
+        for (let i = 0; i < 3; i++) {
+          const s = document.createElement("span");
+          steam.appendChild(s);
+        }
+        wrap.appendChild(cup);
+        wrap.appendChild(coffeeTop);
+        wrap.appendChild(handle);
+        wrap.appendChild(steam);
+        return wrap;
+      }
+
+      function makeShieldPickup() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj pickup shield";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = "S";
+        wrap.appendChild(bubble);
+        return wrap;
+      }
+
+      function makeSlowPickup() {
+        const wrap = document.createElement("div");
+        wrap.className = "obj pickup slow";
+        const dial = document.createElement("div");
+        dial.className = "dial";
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        const hand = document.createElement("div");
+        hand.className = "hand";
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = "SLOW";
+        dial.appendChild(dot);
+        dial.appendChild(hand);
+        wrap.appendChild(dial);
+        wrap.appendChild(label);
+        return wrap;
+      }
+
+      // ------- Effects -------
+      function spawnFloatText(text, color, x, y, fontSize = 14) {
+        const node = document.createElement("div");
+        node.className = "floatText";
+        node.textContent = text;
+        node.style.color = color;
+        node.style.fontSize = fontSize + "px";
+        node.style.left = `${x}px`;
+        node.style.top = `${y}px`;
+        elEffects.appendChild(node);
+        setTimeout(() => node.remove(), 820);
+      }
+
+      function spawnParticles(count, x, y, dxRange, dyRange, ms, color) {
+        for (let i = 0; i < count; i++) {
+          const p = document.createElement("div");
+          p.className = "particle";
+          p.style.background = color || "var(--green)";
+          const dx = (Math.random() * 2 - 1) * dxRange;
+          const dy = (Math.random() * 2 - 1) * dyRange;
+          const dur = ms * (0.65 + Math.random() * 0.5);
+          p.style.left = `${x}px`;
+          p.style.top = `${y}px`;
+          p.style.setProperty("--dx", `${dx}px`);
+          p.style.setProperty("--dy", `${dy}px`);
+          p.style.setProperty("--dur", `${dur}ms`);
+          elEffects.appendChild(p);
+          setTimeout(() => p.remove(), dur + 20);
+        }
+      }
+
+      function spawnSparks(count, x, y) {
+        for (let i = 0; i < count; i++) {
+          const s = document.createElement("div");
+          s.className = "particle particleSpark";
+          const angle = Math.random() * Math.PI * 2;
+          const dx = Math.cos(angle) * (10 + Math.random() * 18);
+          const dy = Math.sin(angle) * (8 + Math.random() * 14) - 2;
+          const dur = 180 + Math.random() * 90;
+          s.style.left = `${x}px`;
+          s.style.top = `${y}px`;
+          s.style.setProperty("--dx", `${dx}px`);
+          s.style.setProperty("--dy", `${dy}px`);
+          s.style.setProperty("--dur", `${dur}ms`);
+          elEffects.appendChild(s);
+          setTimeout(() => s.remove(), dur + 20);
+        }
+      }
+
+      function shakeScreen() {
+        // Random shake offsets (300ms).
+        const start = performance.now();
+        const duration = 300;
+        const originalTransform = elField.style.transform || "";
+
+        function step() {
+          const elapsed = performance.now() - start;
+          if (elapsed >= duration) {
+            elField.style.transform = originalTransform;
+            return;
+          }
+          const dx = (Math.random() * 2 - 1) * 4;
+          const dy = (Math.random() * 2 - 1) * 3;
+          elField.style.transform = `translate(${dx}px, ${dy}px)`;
+          requestAnimationFrame(step);
+        }
+
+        requestAnimationFrame(step);
+      }
+
+      function flashRedHit() {
+        elRedFlash.classList.remove("hit");
+        // Force reflow to restart animation.
+        void elRedFlash.offsetWidth;
+        elRedFlash.classList.add("hit");
+        setTimeout(() => elRedFlash.classList.remove("hit"), 450);
+
+        if (elGlobalRedFlash) {
+          elGlobalRedFlash.classList.remove("hit");
+          void elGlobalRedFlash.offsetWidth;
+          elGlobalRedFlash.classList.add("hit");
+          setTimeout(() => elGlobalRedFlash.classList.remove("hit"), 450);
+        }
+      }
+
+      function flashSpeedUp() {
+        const n = document.createElement("div");
+        n.className = "speedUpFlash";
+        n.textContent = "SPEED UP!";
+        elEffects.appendChild(n);
+        setTimeout(() => n.remove(), 1050);
+      }
+
+      function flashAchievement(text, color) {
+        const n = document.createElement("div");
+        n.className = "achievement";
+        n.style.color = color;
+        n.textContent = text;
+        elEffects.appendChild(n);
+        setTimeout(() => n.remove(), 940);
+      }
+
+      function waveTransition(waveNo) {
+        elWaveLabel.textContent = `WAVE ${String(waveNo).padStart(2, "0")}`;
+        elWaveLabel.classList.remove("show");
+        void elWaveLabel.offsetWidth;
+        elWaveDim.classList.remove("dim");
+        void elWaveDim.offsetWidth;
+        elWaveDim.classList.add("dim");
+        elWaveLabel.classList.add("show");
+        flashSpeedUp();
+      }
+
+      // ------- Spawning & movement -------
+      function getFieldRect() {
+        return elField.getBoundingClientRect();
+      }
+
+      function computeBounds() {
+        const rect = getFieldRect();
+        const pad = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--field-pad")) || 20;
+
+        // Player size
+        const avatarNode = elPlayerHost.querySelector(".avatarOuter");
+        const pW = avatarNode ? avatarNode.getBoundingClientRect().width : 40;
+        const pH = avatarNode ? avatarNode.getBoundingClientRect().height : 52;
+
+        // Vertical: y is distance from field bottom — use full field minus padding (no artificial low cap).
+        const yMin = 0;
+        const topClear = 8;
+        const yMax = Math.max(32, rect.height - pad - pH - topClear);
+
+        state.bounds = {
+          left: pad + pW / 2,
+          right: rect.width - pad - pW / 2,
+          pad,
+          width: rect.width,
+          height: rect.height,
+          pW,
+          pH,
+          yMin,
+          yMax,
+        };
+      }
+
+      function cleanUpObject(obj) {
+        obj.el?.remove();
+      }
+
+      function removeObject(objIndex) {
+        const obj = state.objects[objIndex];
+        cleanUpObject(obj);
+        state.objects.splice(objIndex, 1);
+        state.dodgedObjects++;
+      }
+
+      function spawnObject() {
+        const type = pickType();
+        const fieldRect = getFieldRect();
+        const pad = state.bounds.pad || 20;
+
+        let obj = null;
+        if (type === "calendar") {
+          obj = { type };
+          obj.el = makeObjElement("calendar");
+          obj.el.dataset.type = "calendar";
+        } else if (type === "slack") {
+          obj = { type };
+          obj.el = makeObjElement("slack");
+          obj.el.dataset.type = "slack";
+        } else if (type === "coffee") {
+          obj = { type: "coffee" };
+          obj.el = makeCoffeeObj();
+        } else if (type === "shield") {
+          obj = { type: "shield" };
+          obj.el = makeShieldPickup();
+        } else if (type === "slow") {
+          obj = { type: "slow" };
+          obj.el = makeSlowPickup();
+        } else {
+          const jira = makeObjElement("jira");
+          obj = { type: "jira" };
+          obj.el = jira.wrap;
+          const ticketId = randomTicketId();
+          const st = randomJiraStatus();
+          obj._jiraData = { id: ticketId, statusText: st.text, statusColor: st.color };
+          jira.setTicketData(obj._jiraData);
+        }
+
+        // Entering animation
+        obj.el.classList.add("spawnPop");
+
+        // Random x within bounds
+        elField.appendChild(obj.el);
+        // Layout read after append so dimensions are correct
+        const objRect = obj.el.getBoundingClientRect();
+        const oW = objRect.width;
+        const leftMin = pad + oW / 2;
+        const leftMax = fieldRect.width - pad - oW / 2;
+        const x = leftMin + Math.random() * (leftMax - leftMin);
+
+        obj.baseX = x;
+        obj.x = x;
+        obj.y = -50 - Math.random() * 30;
+        obj.spawnTimeMs = performance.now();
+        obj.nearTriggered = false;
+
+        if (obj.type === "slack") {
+          obj.zigzagPhase = Math.random() * Math.PI * 2;
+        }
+
+        // Speed depends on current wave. Jira is 40% faster than calendar.
+        const currentWave = state.waveIndex;
+        const base = state.baseSpeed + currentWave * state.speedInc;
+        let speed = base;
+        if (obj.type === "jira") speed = base * 1.4;
+        obj.speed = speed;
+
+        // Jira trail state
+        if (obj.type === "jira") {
+          const ghostNodes = obj.el.querySelectorAll(".trailGhost");
+          obj.trail = {
+            ys: [],
+            ghosts: ghostNodes,
+            lastUpdateMs: performance.now(),
+          };
+          // Set fixed opacities for the three ghosts
+          if (obj.trail.ghosts && obj.trail.ghosts.length >= 3) {
+            obj.trail.ghosts[0].style.opacity = "0.15";
+            obj.trail.ghosts[1].style.opacity = "0.08";
+            obj.trail.ghosts[2].style.opacity = "0.03";
+          }
+        }
+
+        obj.el.style.left = `${x}px`;
+        obj.el.style.top = `${obj.y}px`;
+
+        // Remove spawnPop after it finishes to keep transforms clean.
+        setTimeout(() => obj.el.classList.remove("spawnPop"), 180);
+
+        state.objects.push(obj);
+      }
+
+      function spawnBackgroundObjectsOnce() {
+        const count = 7;
+        state.bgObjects = [];
+        const fieldRect = getFieldRect();
+        const pad = 20;
+
+        for (let i = 0; i < count; i++) {
+          const type = (Math.random() < 0.6) ? "calendar" : (Math.random() < 0.8 ? "slack" : "jira");
+          const rect = (type === "jira") ? (makeObjElement("jira").wrap) : makeObjElement(type);
+          const el = rect.wrap ?? rect; // jira factory returns wrapper+helpers for makeObjElement("jira")
+          if (type === "jira") {
+            // makeObjElement("jira") returns helper object, so we need to call again to properly build the helpers
+          }
+
+          // For background, create fresh elements without extra data. Keep it simple and non-interactive.
+          let objEl;
+          if (type === "calendar") objEl = makeObjElement("calendar");
+          else if (type === "slack") objEl = makeObjElement("slack");
+          else {
+            const jira = makeObjElement("jira");
+            // Populate with arbitrary data
+            jira.setTicketData({ id: randomTicketId(), statusText: "IN PROGRESS", statusColor: "rgba(255,205,60,0.92)" });
+            objEl = jira.wrap;
+          }
+
+          objEl.style.opacity = "0.45";
+          objEl.style.filter = "saturate(0.9) brightness(0.9)";
+          objEl.classList.add("spawnPop");
+          setTimeout(() => objEl.classList.remove("spawnPop"), 180);
+
+          elField.appendChild(objEl);
+          const objRect = objEl.getBoundingClientRect();
+          const oW = objRect.width;
+
+          const x = pad + oW / 2 + Math.random() * (fieldRect.width - pad * 2 - oW);
+          const y = -Math.random() * fieldRect.height;
+
+          state.bgObjects.push({
+            type,
+            el: objEl,
+            x,
+            y,
+            speed: 35 + Math.random() * 20,
+            spawnMs: performance.now(),
+            baseX: x,
+            zigzagPhase: Math.random() * Math.PI * 2,
+          });
+          objEl.style.left = `${x}px`;
+          objEl.style.top = `${y}px`;
+        }
+      }
+
+      function clearBackgroundObjects() {
+        for (const o of state.bgObjects) o.el.remove();
+        state.bgObjects = [];
+      }
+
+      function updateBackground(dt, ts) {
+        const fieldRect = getFieldRect();
+        for (const o of state.bgObjects) {
+          o.y += o.speed * dt;
+          if (o.type === "slack") {
+            const elapsed = (ts - o.spawnMs) / 1000;
+            o.x = o.baseX + Math.sin(elapsed * 0.003) * 1.5;
+          }
+          o.el.style.left = `${o.x}px`;
+          o.el.style.top = `${o.y}px`;
+          if (o.y > fieldRect.height + 80) {
+            // respawn
+            o.y = -80 - Math.random() * 120;
+            const objRect = o.el.getBoundingClientRect();
+            const oW = objRect.width;
+            const pad = 20;
+            o.x = pad + oW / 2 + Math.random() * (fieldRect.width - pad * 2 - oW);
+            o.baseX = o.x;
+            o.spawnMs = ts;
+          }
+        }
+      }
+
+      function updatePlayer(dt, ts) {
+        const dirX =
+          (state.input.left && !state.input.right) ? -1 :
+          (state.input.right && !state.input.left) ? 1 :
+          0;
+        const dirY =
+          (state.input.up && !state.input.down) ? 1 :
+          (state.input.down && !state.input.up) ? -1 :
+          0;
+
+        // Movement tick on horizontal direction change
+        const prevDir = lastTickDir;
+        if (dirX !== prevDir && dirX !== 0) {
+          playMovementTick();
+          lastTickDir = dirX;
+        } else if (dirX === 0) {
+          lastTickDir = 0;
+        }
+
+        // Horizontal velocity
+        if (dirX !== 0) {
+          state.player.vx += dirX * state.player.accel * dt;
+        } else {
+          state.player.vx *= Math.exp(-state.player.friction * dt);
+        }
+
+        // Vertical velocity
+        if (dirY !== 0) {
+          state.player.vy += dirY * state.player.accelY * dt;
+        } else {
+          state.player.vy *= Math.exp(-state.player.friction * dt);
+        }
+
+        state.player.vx = clamp(state.player.vx, -state.player.maxVx, state.player.maxVx);
+        state.player.vy = clamp(state.player.vy, -state.player.maxVy, state.player.maxVy);
+
+        state.player.x += state.player.vx * dt;
+        state.player.x = clamp(state.player.x, state.bounds.left, state.bounds.right);
+
+        state.player.y += state.player.vy * dt;
+        state.player.y = clamp(state.player.y, state.bounds.yMin, state.bounds.yMax);
+
+        // Tilt based on horizontal movement
+        const tilt = dirX === 0
+          ? 0
+          : (dirX < 0 ? -10 : 10);
+        state.player.tiltDeg = tilt;
+        const outer = elPlayerHost.querySelector(".avatarOuter");
+        if (outer) {
+          outer.style.setProperty("--tilt", `${tilt}deg`);
+          if (outer.classList.contains("ducking")) {
+            outer.style.transform = `translateX(-50%) rotate(${tilt}deg) scaleY(0.7)`;
+          } else {
+            outer.style.transform = `translateX(-50%) rotate(${tilt}deg) scaleY(1)`;
+          }
+          outer.style.bottom = `${state.player.y}px`;
+        }
+
+        positionPlayer(state.player.x);
+
+        // Ducking timeout guard (in case timer got out of sync)
+        if (state.player.duckUntilMs < ts) {
+          const outer2 = elPlayerHost.querySelector(".avatarOuter");
+          if (outer2) outer2.classList.remove("ducking");
+        }
+      }
+
+      function updateSpeedAndSpawn(ts) {
+        const elapsedMs = ts - state.startTimeMs;
+        state.elapsedMs = elapsedMs;
+
+        // Wave is based on 15s intervals for steeper difficulty
+        state.waveIndex = Math.floor(elapsedMs / 15000);
+        if (state.waveIndex !== state.prevWaveIndex) {
+          state.prevWaveIndex = state.waveIndex;
+          const waveNo = state.waveIndex + 1;
+          waveTag.textContent = String(waveNo).padStart(2, "0");
+          waveTransition(waveNo);
+
+          // Update speed multiplier immediately for existing objects as well.
+          const base = state.baseSpeed + state.waveIndex * state.speedInc;
+          for (const obj of state.objects) {
+            obj.speed = base * (obj.type === "jira" ? 1.4 : 1.0);
+          }
+
+          playSpeedIncrease();
+        }
+
+        // Update UI
+        survivedTag.textContent = `[SURVIVED: ${formatSurvivedHuman(elapsedMs)}]`;
+        bonusTag.textContent = (state.bonusScore >= 0)
+          ? `+${String(state.bonusScore).padStart(3, "0")}`
+          : `${state.bonusScore}`;
+
+        const waveNoForMult = state.waveIndex;
+        const mult = (state.baseSpeed + waveNoForMult * state.speedInc) / state.baseSpeed;
+        multTag.textContent = `${mult.toFixed(1)}x`;
+
+        if (powerTag) {
+          const slowLeft = Math.max(0, (state.slowUntilMs - ts) / 1000);
+          const parts = [];
+          if (state.shieldCharges > 0) parts.push(`SHIELD×${state.shieldCharges}`);
+          if (slowLeft > 0.05) parts.push(`SLOW ${slowLeft.toFixed(1)}s`);
+          powerTag.textContent = parts.length ? `[${parts.join(" | ")}]` : `[PWR: —]`;
+        }
+
+        // Smooth speed bar fill: 5 blocks
+        const wavePeriod = 15000;
+        const waveProgress = (elapsedMs % wavePeriod) / wavePeriod; // 0..1
+        const difficultyLevel = 2 + state.waveIndex * 1.1 + waveProgress * 1.2;
+        for (let i = 0; i < 5; i++) {
+          const fill = clamp(difficultyLevel - i, 0, 1);
+          speedFillEls[i].style.setProperty("--fill", fill.toFixed(3));
+        }
+
+        // Achievements
+        const totalSec = Math.floor(elapsedMs / 1000);
+        const stillEvery = 30;
+        while (totalSec >= state.nextStillSec) {
+          // STILL EMPLOYED triggers every 30 seconds survived.
+          flashAchievement("STILL EMPLOYED", "rgba(0,255,65,0.95)");
+          playAchievementJingle();
+          state.nextStillSec += stillEvery;
+        }
+        if (totalSec >= 60 && !state.survivedMondayTriggered) {
+          state.survivedMondayTriggered = true;
+          flashAchievement("SURVIVING MONDAY", "rgba(74,158,255,0.95)");
+          playAchievementJingle();
+        }
+        if (totalSec >= 120 && !state.legendaryIntrovertTriggered) {
+          state.legendaryIntrovertTriggered = true;
+          flashAchievement("LEGENDARY INTROVERT", "rgba(255,51,51,0.95)");
+          playAchievementJingle();
+        }
+
+        // Spawn rate based on wave: start 1.4s, reduce 0.15s per wave min 0.25s
+        const intervalS = Math.max(0.25, 1.4 - state.waveIndex * 0.15);
+        state.spawnIntervalS = intervalS;
+      }
+
+      function updateObjects(dt, ts) {
+        const fieldRect = getFieldRect();
+        const avOuter = elPlayerHost.querySelector(".avatarOuter");
+        const playerRect = avOuter.getBoundingClientRect();
+        const playerHazardHit = shrinkRect(playerRect, 6);
+        const slowMul = ts < state.slowUntilMs ? 0.52 : 1;
+
+        // For near-miss distance, use centers from current rects.
+        for (let i = state.objects.length - 1; i >= 0; i--) {
+          const obj = state.objects[i];
+
+          // Move
+          const prevY = obj.y;
+          obj.y += obj.speed * dt * slowMul;
+
+          if (obj.type === "slack") {
+            const elapsed = (ts - obj.spawnTimeMs) / 1000;
+            obj.x = obj.baseX + Math.sin(elapsed * 0.003 + obj.zigzagPhase) * 1.5;
+          }
+
+          obj.el.style.top = `${obj.y}px`;
+          obj.el.style.left = `${obj.x}px`;
+
+          // Jira subtle blue trail: three ghost copies using previous y positions.
+          if (obj.type === "jira" && obj.trail) {
+            obj.trail.ys = obj.trail.ys || [];
+            obj.trail.ys.push(prevY);
+            while (obj.trail.ys.length > 3) obj.trail.ys.shift();
+
+            const ghosts = obj.trail.ghosts;
+            if (ghosts && ghosts.length >= 3) {
+              const ys = obj.trail.ys;
+              const newest = ys[ys.length - 1] ?? obj.y;
+              const mid = ys.length >= 2 ? ys[ys.length - 2] : newest;
+              const oldest = ys.length >= 3 ? ys[0] : mid;
+
+              // Ghost wrapper top is at obj.y, so apply offset relative to current.
+              ghosts[0].style.top = `${newest - obj.y}px`;
+              ghosts[1].style.top = `${mid - obj.y}px`;
+              ghosts[2].style.top = `${oldest - obj.y}px`;
+            }
+          }
+
+          // Collision + near miss
+          const oRect = obj.el.getBoundingClientRect();
+          const goodie = isGoodie(obj.type);
+          // Power-ups: full avatar rect vs slightly inflated pickup — any overlap counts.
+          const playerHitRect = goodie ? playerRect : playerHazardHit;
+          const oHitRect = goodie ? growRect(oRect, 14) : shrinkRect(oRect, 6);
+
+          if (rectsOverlap(oHitRect, playerHitRect)) {
+            const cx = (oRect.left + oRect.right) / 2 - fieldRect.left;
+            const cy = (oRect.top + oRect.bottom) / 2 - fieldRect.top;
+
+            if (obj.type === "coffee") {
+              state.bonusScore += 15;
+              spawnFloatText("+15 COFFEE", "rgba(0,255,65,0.95)", cx, cy - 10, 13);
+              spawnParticles(10, cx, cy, 24, 24, 420, "rgba(0,255,65,0.9)");
+              playSpeedIncrease();
+              removeObject(i);
+              continue;
+            }
+            if (obj.type === "shield") {
+              state.shieldCharges++;
+              state.bonusScore += 12;
+              spawnFloatText("+SHIELD", "rgba(0,255,65,0.95)", cx, cy - 10, 14);
+              spawnParticles(12, cx, cy, 28, 28, 400, "rgba(0,255,65,0.85)");
+              playAchievementJingle();
+              removeObject(i);
+              continue;
+            }
+            if (obj.type === "slow") {
+              state.slowUntilMs = ts + 5500;
+              state.bonusScore += 12;
+              spawnFloatText("SLOW-MO!", "rgba(74,158,255,0.98)", cx, cy - 10, 14);
+              spawnParticles(10, cx, cy, 26, 26, 450, "rgba(74,158,255,0.75)");
+              playSpeedIncrease();
+              removeObject(i);
+              continue;
+            }
+
+            if (state.shieldCharges > 0) {
+              state.shieldCharges--;
+              state.bonusScore += 8;
+              spawnFloatText("SHIELD BROKEN!", "rgba(0,255,65,0.95)", cx, cy - 12, 13);
+              spawnParticles(16, cx, cy, 36, 36, 520, "rgba(0,255,65,0.9)");
+              playWhoosh();
+              removeObject(i);
+              continue;
+            }
+
+            endGame("hit");
+            return;
+          }
+
+          // Near miss only for real hazards (not power-ups / bonus items)
+          if (!obj.nearTriggered && !isGoodie(obj.type)) {
+            const dist = distanceCenters(oRect, playerRect);
+            if (dist <= 20) {
+              obj.nearTriggered = true;
+              state.nearMisses++;
+              state.bonusScore += 5;
+
+              const playerCenterX = (playerRect.left + playerRect.right) / 2;
+              const playerCenterY = (playerRect.top + playerRect.bottom) / 2;
+              const x = playerCenterX - fieldRect.left;
+              const y = playerCenterY - fieldRect.top;
+              spawnFloatText("PHEW!", "rgba(255,205,60,0.95)", x, y - 8, 14);
+
+              const ox = (oRect.left + oRect.right) / 2 - fieldRect.left;
+              const oy = (oRect.top + oRect.bottom) / 2 - fieldRect.top;
+              spawnSparks(5, ox, oy);
+              playWhoosh();
+
+              if (dist <= 12) duckAvatar();
+            }
+          }
+
+          // Clean up past bottom
+          if (obj.y > fieldRect.height + 140) {
+            removeObject(i);
+          }
+        }
+      }
+
+      // ------- Mode transitions -------
+      /** Main menu: START button + leaderboard. Pass lastDeath after a run ends. */
+      function showMainMenu(opts) {
+        opts = opts || {};
+        const last = opts.lastDeath || null;
+
+        elOverlay.classList.remove("hidden");
+        elOverlay.style.display = "flex";
+
+        if (powerTag) powerTag.textContent = "[PWR: —]";
+
+        const bestMs = loadBestMs();
+        bestTag.textContent = `[BEST: ${formatMSS(bestMs)}]`;
+
+        const board = loadLeaderboard();
+        const boardHTML = board.length
+          ? board.map((r, idx) =>
+              `<div class="leaderboardRow"><span class="lbRank">#${idx + 1}</span><span class="lbTime">${formatMSS(r.t)}</span><span class="lbBonus">+${String(r.b ?? 0).padStart(3, "0")}</span></div>`
+            ).join("")
+          : `<div class="leaderboardRow muted">No runs yet — click START GAME.</div>`;
+
+        let deathBanner = "";
+        if (last) {
+          const mult = (state.baseSpeed + last.waveIndex * state.speedInc) / state.baseSpeed;
+          const trophy = last.newBest ? `
+            <div id="trophyWrap" style="justify-content:center;">
+              <div class="trophy" aria-hidden="true">
+                <div class="cup"></div><div class="handleL"></div><div class="handleR"></div><div class="stem"></div><div class="base"></div>
+              </div>
+              <div class="newBest">NEW PERSONAL BEST</div>
+            </div>` : "";
+          deathBanner = `
+            <div class="lastRunBanner">
+              <div class="bigCenter" style="font-size:26px;margin-top:0;">MEETING ACCEPTED</div>
+              <div class="subCenter">You survived: ${formatMSS(last.elapsedMs)}</div>
+              ${trophy}
+              <div class="monoTag" style="font-size:12px; color: rgba(255,255,255,0.82); text-align:center; margin-top:8px;">
+                [DODGED: ${String(last.dodged).padStart(4, "0")}] &nbsp;
+                [NEAR: ${String(last.nearMisses).padStart(3, "0")}] &nbsp;
+                [BONUS: +${String(last.bonusScore).padStart(3, "0")}] &nbsp;
+                [MULT: ${mult.toFixed(1)}x]
+              </div>
+              <div class="monoTag" style="font-size:11px; color: rgba(74,158,255,0.88); text-align:center; margin-top:6px;">
+                ${last.flavor || ""}
+              </div>
+            </div>`;
+        }
+
+        const overlayHTML = `
+          ${deathBanner}
+          <div class="menuWrap">
+            <div class="titleAscii">█▀▀▀▀▀▀▀▀▀▀▀█<br/>█ DODGE THE █<br/>█ MEETINGS  █<br/>▀▄▄▄▄▄▄▄▄▄▄▄▀</div>
+            <div class="monoTag menuPersonalBest">PERSONAL BEST: ${formatMSS(bestMs)}</div>
+            <button type="button" id="btnStartGame" class="menuStartBtn" autocomplete="off">▶ START GAME</button>
+            <div class="menuHint">WASD / arrows · Coffee (+bonus) · Green S = shield (soaks 1 hit) · Blue = slow-mo ~5.5s</div>
+            <div class="leaderboardPanel">
+              <h3>LOCAL LEADERBOARD — TOP 5</h3>
+              <div class="leaderboardHead"><span>RANK</span><span>TIME</span><span class="lbBonus">BONUS</span></div>
+              ${boardHTML}
+            </div>
+            <div class="monoTag" id="flavorText" style="font-size:12px; text-align:center; margin-top:14px; color: rgba(0,255,65,0.75);">
+              ${overlayFlavors[0]}
+            </div>
+            <div class="monoTag" style="font-size:11px; text-align:center; margin-top:10px; color: rgba(255,255,255,0.45);">
+              Press Enter to start · Saved in this browser only
+            </div>
+          </div>
+        `;
+        elOverlayInner.innerHTML = overlayHTML;
+
+        const btn = document.getElementById("btnStartGame");
+        if (btn) {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            ensureAudio();
+            startGame();
+          });
+        }
+
+        let fi = 0;
+        const flavorEl = document.getElementById("flavorText");
+        clearInterval(state.flavorTimer);
+        state.flavorTimer = setInterval(() => {
+          fi = (fi + 1) % overlayFlavors.length;
+          if (flavorEl) flavorEl.textContent = overlayFlavors[fi];
+        }, 3000);
+
+        clearBackgroundObjects();
+        spawnBackgroundObjectsOnce();
+      }
+
+      function hideOverlay() {
+        elOverlay.classList.add("hidden");
+      }
+
+      function loadBestMs() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return 0;
+          const parsed = JSON.parse(raw);
+          if (typeof parsed === "number") return parsed;
+          if (parsed && typeof parsed.bestMs === "number") return parsed.bestMs;
+          return 0;
+        } catch {
+          return 0;
+        }
+      }
+
+      function loadLeaderboard() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.board)) return parsed.board;
+          return [];
+        } catch {
+          return [];
+        }
+      }
+
+      function saveRunToLeaderboard(elapsedMs, bonusScore) {
+        try {
+          const board = loadLeaderboard();
+          board.push({ t: elapsedMs, b: bonusScore, d: Date.now() });
+          board.sort((a, b) => b.t - a.t);
+          const top = board.slice(0, 5);
+          const bestMs = Math.max(loadBestMs(), elapsedMs);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ bestMs, board: top }));
+        } catch {
+          // ignore storage errors
+        }
+      }
+
+      function resetStats() {
+        state.bonusScore = 0;
+        state.nearMisses = 0;
+        state.dodgedObjects = 0;
+        state.stillEmployedTriggered = new Set();
+        state.nextStillSec = 30;
+        state.survivedMondayTriggered = false;
+        state.legendaryIntrovertTriggered = false;
+        state.goalReached = false;
+        state.shieldCharges = 0;
+        state.slowUntilMs = 0;
+      }
+
+      function resetPlayerAndBounds() {
+        computeBounds();
+        state.player.x = (state.bounds.left + state.bounds.right) / 2;
+        state.player.y = state.bounds.yMin;
+        state.player.vx = 0;
+        state.player.vy = 0;
+        state.player.duckUntilMs = 0;
+        state.player.tiltDeg = 0;
+        positionPlayer(state.player.x);
+        // Ensure duck cleared
+        const outer = elPlayerHost.querySelector(".avatarOuter");
+        if (outer) {
+          outer.classList.remove("ducking");
+          outer.style.bottom = `${state.player.y}px`;
+        }
+      }
+
+      function startGame() {
+        if (state.mode === "playing") return;
+        ensureAudio();
+
+        state.input.left = false;
+        state.input.right = false;
+        state.input.up = false;
+        state.input.down = false;
+        lastTickDir = 0;
+
+        state.mode = "playing";
+        elOverlay.classList.add("hidden");
+        elEffects.innerHTML = "";
+
+        clearBackgroundObjects();
+        if (state.flavorTimer) clearInterval(state.flavorTimer);
+
+        resetStats();
+        state.prevWaveIndex = 0;
+        state.waveIndex = 0;
+        state.spawnAccMs = 0;
+        state.spawnIntervalS = 1.4;
+
+        state.startTimeMs = performance.now();
+        state.elapsedMs = 0;
+        waveTag.textContent = "01";
+        bonusTag.textContent = "+000";
+
+        // Prepare player DOM (avatar must exist before bounds reads sizes)
+        elPlayerHost.innerHTML = "";
+        elPlayerHost.appendChild(makeAvatarNode());
+
+        // Player setup
+        resetPlayerAndBounds();
+
+        // Footprints start
+        state.trailXs = [];
+        if (state.trailTimer) clearInterval(state.trailTimer);
+        if (state.footprints.length === 0) createFootprints();
+        for (const fx of state.footprints) fx.style.opacity = "0";
+        state.trailTimer = setInterval(() => {
+          state.trailXs.unshift(state.player.x);
+          if (state.trailXs.length > 3) state.trailXs.length = 3;
+          for (let i = 0; i < 3; i++) {
+            const fx = state.footprints[i];
+            if (!fx) continue;
+            const x = state.trailXs[i];
+            if (typeof x !== "number") {
+              fx.style.opacity = "0";
+              continue;
+            }
+            fx.style.opacity = (i === 0 ? "0.22" : i === 1 ? "0.14" : "0.08");
+            const outer = fx.querySelector(".avatarOuter");
+            if (outer) {
+              outer.classList.remove("ducking");
+              outer.style.left = `${x}px`;
+              outer.style.bottom = `${state.player.y}px`;
+              outer.style.setProperty("--tilt", `${state.player.tiltDeg}deg`);
+              outer.style.transform = `translateX(-50%) rotate(${state.player.tiltDeg}deg) scaleY(1)`;
+            }
+          }
+        }, 100);
+
+        document.title = "DODGE THE MEETINGS | Surviving...";
+      }
+
+      function endGame(reason) {
+        if (state.mode !== "playing") return;
+        state.elapsedMs = performance.now() - state.startTimeMs;
+        const elapsedMs = state.elapsedMs;
+        const bonusScore = state.bonusScore;
+        const dodged = state.dodgedObjects;
+        const nearMisses = state.nearMisses;
+        const waveIndex = state.waveIndex;
+
+        ensureAudio();
+        playGameOver();
+
+        // Burst of 20 green particles and red overlay are triggered here.
+        const fieldRect = getFieldRect();
+        const playerOuter = elPlayerHost.querySelector(".avatarOuter");
+        const pr = playerOuter.getBoundingClientRect();
+        const x = (pr.left + pr.right) / 2 - fieldRect.left;
+        const y = (pr.top + pr.bottom) / 2 - fieldRect.top;
+        spawnParticles(20, x, y, 60, 60, 500, "rgba(0,255,65,0.95)");
+        flashRedHit();
+        shakeScreen();
+
+        // Cleanup falling objects
+        for (const obj of state.objects) obj.el.remove();
+        state.objects = [];
+
+        // Stop background
+        clearBackgroundObjects();
+        if (state.trailTimer) clearInterval(state.trailTimer);
+        for (const fx of state.footprints) fx.style.opacity = "0";
+
+        document.title = `GAME OVER | You survived ${formatMSS(elapsedMs)}`;
+
+        const prevBest = loadBestMs();
+        saveRunToLeaderboard(elapsedMs, bonusScore);
+        const newBest = elapsedMs > prevBest;
+        const flavor =
+          gameOverFlavors[Math.floor(Math.random() * gameOverFlavors.length)];
+
+        state.mode = "start";
+        showMainMenu({
+          lastDeath: {
+            elapsedMs,
+            bonusScore,
+            dodged,
+            nearMisses,
+            waveIndex,
+            newBest,
+            flavor,
+          },
+        });
+      }
+
+      // ------- Main loop -------
+      let rafId = 0;
+      let lastTs = performance.now();
+
+      function updateHudOnResize() {
+        // Ensure best tag stays correct
+        const bestMs = loadBestMs();
+        bestTag.textContent = `[BEST: ${formatMSS(bestMs)}]`;
+      }
+
+      function update(ts) {
+        const now = ts || performance.now();
+        const dt = Math.min(0.033, (now - lastTs) / 1000);
+        lastTs = now;
+
+        if (state.mode === "start") {
+          // Background motion only
+          updateBackground(dt, now);
+        }
+
+        if (state.mode === "playing") {
+          // Player movement
+          updatePlayer(dt, now);
+
+          // Update speed/wave/achievements
+          updateSpeedAndSpawn(now);
+
+          // Spawn objects
+          state.spawnAccMs += dt * 1000;
+          const intervalMs = state.spawnIntervalS * 1000;
+          while (state.spawnAccMs >= intervalMs) {
+            state.spawnAccMs -= intervalMs;
+            spawnObject();
+          }
+
+          // Move objects + collision
+          updateObjects(dt, now);
+        }
+
+        rafId = requestAnimationFrame(update);
+      }
+
+      // ------- Controls -------
+      function getDesiredDir() {
+        if (state.input.left && !state.input.right) return -1;
+        if (state.input.right && !state.input.left) return 1;
+        return 0;
+      }
+
+      function onKeyDown(e) {
+        const key = e.key?.toLowerCase?.() || "";
+        if (key === "arrowleft" || key === "a") {
+          state.input.left = true;
+        }
+        if (key === "arrowright" || key === "d") {
+          state.input.right = true;
+        }
+        if (key === "arrowup" || key === "w") {
+          state.input.up = true;
+        }
+        if (key === "arrowdown" || key === "s") {
+          state.input.down = true;
+        }
+
+        ensureAudio();
+
+        if (state.mode === "start") {
+          if (key === "enter" || key === " ") {
+            e.preventDefault();
+            startGame();
+          }
+          return;
+        }
+      }
+
+      function onKeyUp(e) {
+        const key = e.key?.toLowerCase?.() || "";
+        if (key === "arrowleft" || key === "a") state.input.left = false;
+        if (key === "arrowright" || key === "d") state.input.right = false;
+        if (key === "arrowup" || key === "w") state.input.up = false;
+        if (key === "arrowdown" || key === "s") state.input.down = false;
+      }
+
+      window.addEventListener("keydown", onKeyDown, { passive: false });
+      window.addEventListener("keyup", onKeyUp);
+
+      window.addEventListener("blur", () => {
+        state.input.left = false;
+        state.input.right = false;
+        state.input.up = false;
+        state.input.down = false;
+      });
+
+      elField.addEventListener("pointerdown", () => {
+        ensureAudio();
+      });
+
+      // ------- Setup initial view -------
+      function init() {
+        // Player base avatar markup
+        elPlayerHost.innerHTML = "";
+        const av = makeAvatarNode();
+        elPlayerHost.appendChild(av);
+
+        createFootprints();
+        computeBounds();
+        positionPlayer((state.bounds.left + state.bounds.right) / 2);
+
+        // Show mobile overlay if touch capable
+        if ("ontouchstart" in window) {
+          mobileOverlay.classList.add("show");
+        } else {
+          mobileOverlay.classList.remove("show");
+        }
+
+        state.mode = "start";
+        lastTs = performance.now();
+        showMainMenu();
+      }
+
+      window.addEventListener("resize", () => {
+        computeBounds();
+        if (state.mode === "playing") positionPlayer(state.player.x);
+        updateHudOnResize();
+      });
+
+      init();
+      rafId = requestAnimationFrame(update);
+    })();
+  </script>
+</body>
+</html>
